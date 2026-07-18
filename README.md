@@ -30,7 +30,8 @@ only light in the room.
 
 ## Run it
 
-Open `index.html` in a browser — or serve the folder and leave it full-screen on
+It lives at [party.brezgis.com](https://party.brezgis.com). To host your own,
+open `index.html` in a browser — or serve the folder and leave it full-screen on
 a spare monitor:
 
 ```
