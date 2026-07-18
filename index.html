@@ -1,0 +1,1186 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Imieniny</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎂</text></svg>">
+<style>
+  :root { --chrome:#efe7d2; --chrome-dark:#8a7a5c; --chrome-line:#4a3a2a; --paper:#fbf5e4; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #000;
+    overflow: hidden;
+    font-family: "Trebuchet MS", Verdana, system-ui, sans-serif;
+  }
+  #stage {
+    position: fixed; inset: 0;
+    overflow: hidden;
+    background: #000;
+  }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+  #fx { pointer-events: none; }
+
+  /* ---------- DS bottom tray (floating, fades in on mouse move) ---------- */
+  #tray {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+    background: var(--chrome);
+    border: 3px solid var(--chrome-line);
+    border-radius: 12px;
+    padding: 7px 14px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    font-size: 13px; color: #222;
+    user-select: none;
+    opacity: 0; pointer-events: none;
+    transition: opacity .35s ease;
+    box-shadow: 0 4px 16px rgba(0,0,0,.4);
+    z-index: 10;
+  }
+  #tray.show { opacity: .96; pointer-events: auto; }
+  .seg { display: flex; align-items: center; gap: 6px; }
+  .grow { flex: 1; }
+  button {
+    font: inherit; font-weight: bold;
+    background: #fffdf5; color: #3a2f24;
+    border: 2px solid #2a2e33;
+    border-radius: 6px; padding: 3px 9px; cursor: pointer;
+    box-shadow: inset 0 -2px 0 #e8e0cc;
+  }
+  button:active { box-shadow: inset 0 2px 0 #e8e0cc; }
+  button.on { background: #8a5a3c; color: #fff; box-shadow: none; }
+  input[type=range] { width: 130px; accent-color: #8a5a3c; }
+
+  /* round corner buttons, bottom-left */
+  #fabs { position: fixed; left: 16px; bottom: 16px; display: flex; gap: 10px; z-index: 10; }
+  .fab {
+    width: 44px; height: 44px; border-radius: 50%; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #fffdf5; border: 3px solid #2a2e33;
+    box-shadow: 0 3px 0 rgba(0,0,0,.25);
+    font-size: 15px; font-weight: bold; color: #3a2f24;
+    opacity: .55; transition: opacity .25s ease;
+  }
+  .fab:hover, .fab:focus-visible { opacity: 1; }
+  .fab:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,.25); }
+  #dateLabel { min-width: 130px; text-align: center; font-weight: bold; }
+  #clockLabel { font-variant-numeric: tabular-nums; min-width: 46px; text-align: center; }
+
+  /* ---------- PictoChat panels ---------- */
+  #ui { position: absolute; inset: 0; pointer-events: none; }
+  /* calendar & info panels: warm paper with the calendar-red header */
+  .panel {
+    pointer-events: auto;
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    width: min(78%, 460px); max-height: 86%;
+    background: var(--paper);
+    border: 3px solid var(--chrome-line);
+    border-radius: 10px;
+    box-shadow: 0 6px 0 rgba(42,30,20,.35), inset 0 0 0 2px #fffdf2;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .panel-head {
+    background: #c0332b; color: #fff;
+    border-bottom: 3px solid var(--chrome-line);
+    padding: 6px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-weight: bold; letter-spacing: .5px;
+  }
+  .panel-head .x {
+    cursor: pointer; border: 2px solid var(--chrome-line); border-radius: 6px;
+    width: 22px; height: 22px; line-height: 18px; text-align: center;
+    background: var(--paper); color: #3a2f24; font-weight: bold;
+  }
+  /* …while the name card keeps the in-room bubble style */
+  #cardPanel {
+    background: #fffdf5;
+    border: 3px solid #2a2e33;
+    border-radius: 0;
+    box-shadow: none;
+    clip-path: polygon(0 8px, 4px 8px, 4px 4px, 8px 4px, 8px 0,
+      calc(100% - 8px) 0, calc(100% - 8px) 4px, calc(100% - 4px) 4px, calc(100% - 4px) 8px, 100% 8px,
+      100% calc(100% - 8px), calc(100% - 4px) calc(100% - 8px), calc(100% - 4px) calc(100% - 4px),
+      calc(100% - 8px) calc(100% - 4px), calc(100% - 8px) 100%,
+      8px 100%, 8px calc(100% - 4px), 4px calc(100% - 4px), 4px calc(100% - 8px), 0 calc(100% - 8px));
+  }
+  #cardPanel .panel-head {
+    background: #fffdf5; color: #a08a5a;
+    border-bottom: 2px solid #eee5cf;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
+    padding: 7px 12px 5px;
+  }
+  #cardPanel .panel-head .x { background: #fffdf5; border-color: #2a2e33; }
+  .panel-body { padding: 12px 14px; overflow-y: auto; font-size: 14px; line-height: 1.5; color: #3a2f24; }
+  .panel-body p { margin: 0 0 9px; }
+  .panel-body a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+  .panel-body a:hover { color: #8a5a3c; }
+
+  /* calendar grid */
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .cal-grid .dow { text-align: center; font-size: 10px; font-weight: bold; color: #777; }
+  .cal-day {
+    border: 2px solid #d8cbb5; border-radius: 5px; background: #fffdf2;
+    min-height: 34px; padding: 2px 3px; font-size: 10px; cursor: pointer; overflow: hidden;
+  }
+  .cal-day b { display: block; font-size: 11px; }
+  .cal-day:hover { border-color: var(--chrome-line); }
+  .cal-day.today { background: #ffe9a8; border-color: #c99b1d; }
+  .cal-day.blank { visibility: hidden; }
+  .cal-day .nm { color: #666; display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+
+  .day-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .name-chip {
+    border: 2px solid var(--chrome-line); border-radius: 12px;
+    background: #fffdf2; padding: 2px 9px; cursor: pointer; font-size: 13px;
+  }
+  .name-chip:hover { background: #ffe9a8; }
+  .name-chip small { color: #888; }
+
+  /* the name card is a touch tighter for its denser text */
+  #cardPanel { width: min(72%, 410px); }
+  #cardPanel .panel-body { font-size: 13px; line-height: 1.45; }
+  #cardPanel .card-name { font-size: 22px; margin: 0 0 4px; }
+  #cardPanel .card-row { margin: 6px 0; }
+  #cardPanel .card-row .lbl { font-size: 10px; }
+
+  .card-name { font-size: 26px; font-weight: bold; margin: 2px 0 6px; }
+  .card-row { margin: 7px 0; }
+  .card-row .lbl { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #86816f; display: block; }
+  .muted { color: #86816f; font-style: italic; }
+  .linkish { color: #2b6cb0; cursor: pointer; text-decoration: underline; }
+  .hidden { display: none !important; }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="room" width="480" height="300"></canvas>
+  <canvas id="fx" width="480" height="300"></canvas>
+  <div id="ui">
+    <div class="panel hidden" id="calPanel">
+      <div class="panel-head"><span id="calTitle">Kalendarz</span><span class="x" data-close="calPanel">×</span></div>
+      <div class="panel-body" id="calBody"></div>
+    </div>
+    <div class="panel hidden" id="cardPanel">
+      <div class="panel-head"><span id="cardTitle">Karta imienia</span><span class="x" data-close="cardPanel">×</span></div>
+      <div class="panel-body" id="cardBody"></div>
+    </div>
+    <div class="panel hidden" id="infoPanel">
+      <div class="panel-head"><span id="infoTitle">O imieninach</span><span class="x" data-close="infoPanel">×</span></div>
+      <div class="panel-body" id="infoBody"></div>
+    </div>
+  </div>
+</div>
+
+<div id="fabs">
+  <button class="fab" id="langFab" title="Język / Language">PL</button>
+  <button class="fab" id="infoFab" title="O imieninach / About name days">i</button>
+</div>
+
+<div id="tray">
+  <div class="seg">
+    <span id="dateLabel"></span>
+  </div>
+  <div class="seg grow"></div>
+  <div class="seg">
+    <span>🕯</span>
+    <input type="range" id="timeSlider" min="0" max="1439" step="5">
+    <span id="clockLabel"></span>
+    <button id="liveBtn" class="on">Live</button>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="cards.js"></script>
+<script>
+"use strict";
+/* ================================================================
+   Imieniny — an ambient Polish name day room.
+   Top screen: pixel room (canvas). Bottom tray: DS-style controls.
+   ================================================================ */
+
+/* Logical resolution adapts to the viewport aspect so the room fills the
+   screen edge-to-edge with extra wall/floor, never stretched pixels.
+   Scene coordinates stay in the classic 480×300 frame, offset by SDX/SDY. */
+let W = 480, H = 300, SDX = 0, SDY = 0;
+const roomCanvas = document.getElementById("room");
+const fxCanvas = document.getElementById("fx");
+const room = roomCanvas.getContext("2d");
+const fx = fxCanvas.getContext("2d");
+const stageEl = document.getElementById("stage");
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function resize() {
+  const aspect = innerWidth / Math.max(1, innerHeight);
+  if (aspect >= 1.6) { H = 300; W = Math.min(680, Math.round(300 * aspect)); }
+  else { W = 480; H = Math.min(460, Math.round(480 / aspect)); }
+  SDX = Math.round((W - 480) / 2);
+  SDY = Math.round((H - 300) * 0.45);
+  roomCanvas.width = W; roomCanvas.height = H;
+  fxCanvas.width = W; fxCanvas.height = H;
+}
+resize();
+addEventListener("resize", resize);
+
+/* ---------------- i18n ---------------- */
+const I18N = {
+  pl: {
+    months: ["stycznia","lutego","marca","kwietnia","maja","czerwca","lipca","sierpnia","września","października","listopada","grudnia"],
+    monthsNom: ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"],
+    dows: ["Pn","Wt","Śr","Cz","Pt","So","Nd"],
+    weekdays: ["niedziela","poniedziałek","wtorek","środa","czwartek","piątek","sobota"],
+    wish: "Sto lat, solenizanci!",
+    wishes: ["Sto lat!","Wszystkiego najlepszego!","Zdrowia, szczęścia, słodkości!","Niech się spełnią marzenia!"],
+    calendar: "Kalendarz imienin", nameCard: "Karta imienia",
+    allToday: "Dziś świętują też:", back: "◀ wróć",
+    bearers: n => `${n.toLocaleString("pl-PL")} osób w Polsce nosi to imię`,
+    bearersLbl: "W rejestrze PESEL", origin: "Pochodzenie", dims: "Zdrobnienia",
+    nameDays: "Imieniny", live: "Live",
+    alsoGift: "Dziś świętuje też…",
+    noCard: "O tym imieniu karta jeszcze się pisze — ale imię jest piękne i dziś ma swój dzień.",
+    rare: "rzadkie imię",
+    close: "Zamknij",
+    infoTitle: "O imieninach",
+    infoBody: `<p><b>Imieniny</b> to święto wszystkich osób noszących dane imię — w Polsce przez lata ważniejsze niż urodziny. Każdy dzień roku ma swoich solenizantów.</p>
+<p>Na wstędze wiszą dziś najpopularniejsze świętujące imiona. Wszystkie imiona są dobre — pełną listę dnia znajdziesz, klikając kalendarz na ścianie. Prezenty przedstawią Ci rzadsze imiona, imię na wstędze można kliknąć, a tort… też można kliknąć.</p>
+<p>Liczby osób pochodzą z rejestru PESEL (styczeń 2026), a kalendarz z tradycyjnego zestawu imienin — drukowane kalendarze trochę się różnią, więc Twój może podawać inne imiona.</p>
+<p><b>Sto lat!</b></p>`,
+  },
+  en: {
+    months: ["January","February","March","April","May","June","July","August","September","October","November","December"],
+    monthsNom: ["January","February","March","April","May","June","July","August","September","October","November","December"],
+    dows: ["Mo","Tu","We","Th","Fr","Sa","Su"],
+    weekdays: ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"],
+    wish: "Happy name day!",
+    wishes: ["Sto lat! (100 years!)","All the best!","Health, luck and sweetness!","May your wishes come true!"],
+    calendar: "Name day calendar", nameCard: "Name card",
+    allToday: "Also celebrating today:", back: "◀ back",
+    bearers: n => `${n.toLocaleString("en-GB")} people in Poland carry this name`,
+    bearersLbl: "In the PESEL registry", origin: "Origin", dims: "Diminutives",
+    nameDays: "Name days", live: "Live",
+    alsoGift: "Also celebrating today…",
+    noCard: "This name's card is still being written — but it's a fine name, and today is its day.",
+    rare: "a rare name",
+    close: "Close",
+    infoTitle: "About name days",
+    infoBody: `<p><b>Name days</b> (imieniny) celebrate everyone who bears a given name — in Poland long a bigger occasion than birthdays. Every day of the year has its celebrants.</p>
+<p>The banner shows today's most popular celebrating names. All names are good — click the wall calendar for a day's full list. The gifts introduce rarer names, names on the banner can be clicked, and the cake… can also be clicked.</p>
+<p>Bearer counts come from Poland's PESEL registry (January 2026); the calendar follows a traditional set — printed calendars vary a little, so yours may differ.</p>
+<p><b>Sto lat — a hundred years!</b></p>`,
+  }
+};
+const urlLang = new URLSearchParams(location.search).get("lang");
+let lang = urlLang || localStorage.getItem("imieniny-lang") || "pl";
+if (!I18N[lang]) lang = "pl";
+const T = () => I18N[lang];
+
+
+/* ---------------- state ---------------- */
+const params = new URLSearchParams(location.search);
+const state = {
+  simHour: params.has("h") ? parseFloat(params.get("h")) : null, // null = live clock
+  t: 0,
+};
+function todayKey() {
+  const n = new Date();
+  return String(n.getMonth() + 1).padStart(2, "0") + "-" + String(n.getDate()).padStart(2, "0");
+}
+function activeKey() { return todayKey(); }
+function activeHour() {
+  if (state.simHour != null) return state.simHour;
+  const n = new Date();
+  return n.getHours() + n.getMinutes() / 60;
+}
+function keyToDate(key) {
+  const [m, d] = key.split("-").map(Number);
+  const y = new Date().getFullYear();
+  return new Date(y, m - 1, d);
+}
+
+/* ---------------- tiny helpers ---------------- */
+const lerp = (a, b, t) => a + (b - a) * t;
+function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function mix(c1, c2, t) {
+  const a = hexToRgb(c1), b = hexToRgb(c2);
+  return `rgb(${Math.round(lerp(a[0],b[0],t))},${Math.round(lerp(a[1],b[1],t))},${Math.round(lerp(a[2],b[2],t))})`;
+}
+function timeRamp(stops, h) { // stops: [[hour, "#hex"], ...] sorted
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [h1, c1] = stops[i], [h2, c2] = stops[i + 1];
+    if (h >= h1 && h <= h2) return mix(c1, c2, (h - h1) / (h2 - h1));
+  }
+  return stops[stops.length - 1][1];
+}
+
+/* daylight factor: 0 = deep night, 1 = full day */
+function daylight(h) {
+  if (h < 4.5 || h > 22.5) return 0;
+  if (h < 7) return (h - 4.5) / 2.5;
+  if (h > 20) return (22.5 - h) / 2.5;
+  return 1;
+}
+/* golden warmth factor peaks ~6:30 and ~19:30 */
+function warmth(h) {
+  const g = x => Math.exp(-((h - x) ** 2) / 1.1);
+  return Math.min(1, g(6.5) + g(19.5));
+}
+
+/* ---------------- crisp-pixel helpers ---------------- */
+/* Scanline ellipse: hard-stepped rows, no antialiasing. half: -1 top, 1 bottom */
+function fillEllipseC(ctx, cx, cy, rx, ry, color, half = 0) {
+  ctx.fillStyle = color;
+  for (let dy = -ry; dy <= ry; dy++) {
+    if (half === -1 && dy > 0) continue;
+    if (half === 1 && dy < 0) continue;
+    const w = Math.round(rx * Math.sqrt(Math.max(0, 1 - (dy / ry) ** 2)));
+    ctx.fillRect(Math.round(cx - w), Math.round(cy + dy), w * 2, 1);
+  }
+}
+function pixelLine(ctx, x0, y0, x1, y1, color, thick = 2) {
+  ctx.fillStyle = color;
+  const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+  for (let i = 0; i <= steps; i++) {
+    ctx.fillRect(Math.round(lerp(x0, x1, i / steps)), Math.round(lerp(y0, y1, i / steps)), thick, thick);
+  }
+}
+/* Text drawn into a buffer, alpha-thresholded to kill antialiasing, then blitted.
+   drawFn receives the buffer ctx; blit lands at (dx, dy). */
+const txtC = document.createElement("canvas");
+const txt = txtC.getContext("2d", { willReadFrequently: true });
+function crispBlit(ctx, w, h, dx, dy, drawFn) {
+  txtC.width = Math.max(1, Math.ceil(w)); txtC.height = Math.max(1, Math.ceil(h));
+  drawFn(txt);
+  const im = txt.getImageData(0, 0, txtC.width, txtC.height);
+  const d = im.data;
+  for (let i = 3; i < d.length; i += 4) d[i] = d[i] < 120 ? 0 : 255;
+  txt.putImageData(im, 0, 0);
+  ctx.drawImage(txtC, Math.round(dx), Math.round(dy));
+}
+function measureFont(font, text) { txt.font = font; return txt.measureText(text).width; }
+function crispText(ctx, text, x, y, font, color, align = "left", size = 12) {
+  const w = measureFont(font, text);
+  const dx = align === "center" ? x - w / 2 : align === "right" ? x - w : x;
+  crispBlit(ctx, w + 4, size + 8, dx - 2, y, c => {
+    c.font = font; c.fillStyle = color; c.textBaseline = "top"; c.fillText(text, 2, 2);
+  });
+  return w;
+}
+
+/* ---------------- sprites ---------------- */
+function drawGrid(ctx, grid, pal, x, y, s = 1) {
+  const rows = grid.split("\n").filter(r => r.length);
+  for (let j = 0; j < rows.length; j++)
+    for (let i = 0; i < rows[j].length; i++) {
+      const ch = rows[j][i];
+      if (ch === "." || ch === " ") continue;
+      ctx.fillStyle = pal[ch];
+      ctx.fillRect(x + i * s, y + j * s, s, s);
+    }
+}
+
+const GIFT1 = `
+....q..q....
+...qq..qq...
+....qqqq....
+.llllqqllll.
+.llllqqllll.
+bbbbbqqbbbbb
+bWbbbqqbbbWb
+bbbWbqqbWbbb
+bbbbbqqbbbbb
+NNNNNNNNNNNN`;
+const GIFT1_PAL = { q:"#d33c3c", l:"#6a9be0", b:"#4a7fd4", W:"#cfe3f8", N:"#2c56a0" };
+
+const GIFT2 = `
+...g...g...
+..gg...gg..
+...ggggg...
+.llllGllll.
+.llllGllll.
+sssssGsssss
+yyyyyGyyyyy
+sssssGsssss
+NNNNNNNNNNN`;
+const GIFT2_PAL = { g:"#2f9e5f", G:"#2f9e5f", l:"#f7df85", y:"#f2cf5a", s:"#3cb371", N:"#b8912a" };
+
+const GIFT3 = `
+..M.M..
+..MMM..
+pppMppp
+pWpMpWp
+pppMppp
+NNNNNNN`;
+const GIFT3_PAL = { M:"#fff", p:"#e884b0", W:"#f8cfe0", N:"#b05a86" };
+
+const VASE = `
+..www..
+.w..bw.
+.w.b.w.
+..www..
+...W...
+..WWW..
+..WWW..
+.WWWWW.`;
+const VASE_PAL = { w:"#fff", b:"#9ec7e8", W:"#b9d8ee" };
+
+/* porcelain teacup on a saucer, wisp of a flower on the side */
+const TEA = `
+..kkkkkkk...
+.kaaaaaaak..
+.kwwwwwwwkk.
+.kwwFFwwwk.k
+.kwwwwwwwkk.
+..kkkkkkk...
+.ssssssssss.
+SSSSSSSSSSSS`;
+const TEA_PAL = { k:"#8a6a30", a:"#b06a28", w:"#f9d75e", F:"#e884b0", s:"#ecdfb8", S:"#cbbd92" };
+
+/* carnation head: drawn programmatically (jagged circle) */
+
+/* ---------------- room drawing ---------------- */
+const NAMES_TODAY = () => NAMEDATA.banner[activeKey()] || [];
+let nameHitboxes = []; // {x,y,w,h,name}
+let hotRects = [];     // {x,y,w,h,act}
+
+function draw() {
+  const h = activeHour();
+  const dl = daylight(h);
+  const wm = warmth(h);
+  const t = state.t;
+  const key = activeKey();
+  const banner = NAMEDATA.banner[key] || [];
+  nameHitboxes = []; hotRects = [];
+
+  /* ---- wall & floor (full canvas, dynamic size) ---- */
+  const wallH = 192 + SDY;
+  const wallDay = "#e8d9b8", wallNight = "#3a3a55";
+  const floorDay = "#b98d5e", floorNight = "#4a3a45";
+  const wall = mix(wallNight, wallDay, dl);
+  const floor = mix(floorNight, floorDay, dl);
+  room.fillStyle = wall; room.fillRect(0, 0, W, wallH);
+  // wall paper stripes (subtle)
+  room.globalAlpha = 0.08 * (0.3 + 0.7 * dl);
+  room.fillStyle = "#a0713c";
+  for (let x = 8; x < W; x += 26) room.fillRect(x, 0, 7, wallH);
+  room.globalAlpha = 1;
+  // skirting board
+  room.fillStyle = mix("#2c2438", "#8a6238", dl); room.fillRect(0, wallH - 6, W, 6);
+  // floor with plank lines
+  room.fillStyle = floor; room.fillRect(0, wallH, W, H - wallH);
+  // floor pattern in gentle perspective: joins spread apart toward the viewer,
+  // plank lines converge toward a central vanishing point
+  room.fillStyle = "rgba(0,0,0,.11)";
+  let gy = wallH + 8, gap2 = 9;
+  while (gy < H) { room.fillRect(0, gy, W, 2); gy += gap2; gap2 += 4; }
+  const fh2 = H - wallH;
+  for (let xb = -32; xb < W + 64; xb += 60) {
+    const xt = W / 2 + (xb - W / 2) * 0.82;
+    for (let yy = 0; yy < fh2; yy += 2) {
+      const lx = Math.round(lerp(xt, xb, yy / fh2));
+      room.fillRect(lx, wallH + yy, 2, 2);
+    }
+  }
+  // side wall hints (stepped columns, crisp)
+  room.fillStyle = "rgba(0,0,0,.18)";
+  for (let i = 0; i < 14; i++) {
+    const bot = Math.round(wallH + 14 - i * 10 / 14);
+    room.fillRect(i, 0, 1, bot);
+    room.fillRect(W - 1 - i, 0, 1, bot);
+  }
+
+  /* everything from here draws in classic 480×300 scene coordinates */
+  room.save();
+  room.translate(SDX, SDY);
+
+  /* ---- window (right) ---- */
+  const wx = 358, wy = 34, ww = 84, wh = 92;
+  const sky = timeRamp([[0,"#0b1233"],[4.5,"#101a44"],[5.5,"#7a5a8a"],[6.5,"#f0a075"],[7.5,"#8ecae6"],[12,"#a5ddf6"],[17,"#8ecae6"],[18.5,"#f7b267"],[19.5,"#ef7674"],[20.3,"#8a4a7a"],[21.2,"#232a5e"],[22,"#141d4a"],[24,"#0b1233"]], h);
+  room.fillStyle = "#6b4a2f"; room.fillRect(wx-5, wy-5, ww+10, wh+10);       // frame
+  room.fillStyle = sky; room.fillRect(wx, wy, ww, wh);
+  room.save(); room.beginPath(); room.rect(wx, wy, ww, wh); room.clip();
+  // drifting pixel clouds by day
+  if (dl > 0.3) {
+    room.fillStyle = "rgba(255,255,255,.8)";
+    [[0, 12, 0.035, 18], [1, 42, 0.022, 13]].forEach(([ci, cyo, spd, cwid]) => {
+      const cxp = Math.round(wx - 24 + ((t * spd + ci * 53) % (ww + 48)));
+      room.fillRect(cxp, wy + cyo, cwid, 5);
+      room.fillRect(cxp + 3, wy + cyo - 3, cwid - 6, 3);
+      room.fillRect(cxp + 2, wy + cyo + 5, cwid - 4, 2);
+    });
+  }
+  // sun / moon
+  const isDaySun = h >= 6 && h <= 20;
+  const celest = isDaySun ? { p: (h - 6) / 14, c: "#ffd94a" } : { p: ((h + 24 - 20) % 10) / 10, c: "#f2f0dd" };
+  const cx = wx + 10 + celest.p * (ww - 20);
+  const cy = wy + 60 - Math.sin(Math.PI * celest.p) * 42;
+  const sx = Math.round(cx), sy = Math.round(cy);
+  if (isDaySun) {
+    room.fillStyle = "rgba(255,220,90,.35)"; room.fillRect(sx-9, sy-9, 18, 18);
+    room.fillStyle = "#ffdd55"; room.fillRect(sx-6, sy-6, 12, 12);
+    room.fillStyle = "#fff3b8"; room.fillRect(sx-3, sy-3, 6, 6);
+    room.fillStyle = "#ffdd55";
+    room.fillRect(sx-2, sy-11, 4, 4); room.fillRect(sx-2, sy+7, 4, 4);
+    room.fillRect(sx-11, sy-2, 4, 4); room.fillRect(sx+7, sy-2, 4, 4);
+  } else {
+    room.fillStyle = "#f2f0dd"; room.fillRect(sx-5, sy-5, 10, 10);
+    room.fillRect(sx-7, sy-3, 14, 6); room.fillRect(sx-3, sy-7, 6, 14);
+    room.fillStyle = "#cfccb4"; room.fillRect(sx-2, sy-1, 3, 3); room.fillRect(sx+2, sy-4, 2, 2);
+  }
+  if (dl < 0.25) { // stars
+    room.fillStyle = "#e8e8ff";
+    [[12,10],[30,26],[52,14],[66,34],[22,50],[58,58],[40,40]].forEach(([sx,sy],i)=>{
+      if ((t/40|0) % 7 !== i) room.fillRect(wx+sx, wy+sy, 2, 2);
+    });
+  }
+  // glass shine streaks
+  room.fillStyle = "rgba(255,255,255,.10)";
+  for (let i = 0; i < 24; i++) { room.fillRect(wx + 8 + i, wy + 34 - i, 2, 2); room.fillRect(wx + 22 + i, wy + 40 - i, 1, 2); }
+  room.restore();
+  // pane inner shadow — gives the glass some depth
+  room.fillStyle = "rgba(0,0,0,.22)";
+  room.fillRect(wx, wy, ww, 2); room.fillRect(wx, wy, 2, wh);
+  room.fillStyle = "rgba(255,255,255,.12)";
+  room.fillRect(wx, wy + wh - 2, ww, 2); room.fillRect(wx + ww - 2, wy, 2, wh);
+  // mullions with a shaded edge
+  room.fillStyle = "#6b4a2f";
+  room.fillRect(wx + ww/2 - 2, wy, 4, wh); room.fillRect(wx, wy + wh/2 - 2, ww, 4);
+  room.fillStyle = "#57391f";
+  room.fillRect(wx + ww/2 - 2, wy, 1, wh); room.fillRect(wx, wy + wh/2 - 2, ww, 1);
+  // frame highlight + sill with a front lip
+  room.fillStyle = "#8a6a48"; room.fillRect(wx - 5, wy - 5, ww + 10, 2);
+  room.fillStyle = "#7d573a"; room.fillRect(wx - 7, wy + wh + 4, ww + 14, 6);
+  room.fillStyle = "#57391f"; room.fillRect(wx - 7, wy + wh + 10, ww + 14, 2);
+
+  /* ---- light patch from window ---- */
+  if (dl > 0.05) {
+    const sunP = Math.min(1, Math.max(0, (h - 6) / 14));
+    const skew = lerp(70, -70, sunP);
+    const alpha = (0.22 + 0.16 * wm) * dl;
+    room.save();
+    room.globalAlpha = alpha;
+    room.fillStyle = wm > 0.4 ? "#ffcf7a" : "#fff3c4";
+    const floorBot = H - SDY - 6;
+    for (let y = 198; y < floorBot; y++) {
+      const p = (y - 198) / (floorBot - 198);
+      const left = lerp(wx + 4, wx + 4 + skew * 1.35, p);
+      const right = lerp(wx + ww - 4, wx + ww - 4 + skew, p);
+      room.fillRect(Math.round(left), y, Math.max(1, Math.round(right - left)), 1);
+    }
+    room.restore();
+  }
+
+  /* ---- tear-off calendar pad on wall (left): thick stack of pages ---- */
+  const cxx = 30, cyy = 44, cw = 44, ch2 = 56;
+  // pages breathe at the edges: a 1px micro-flutter, no body movement
+  const pf = reducedMotion ? 0 : (Math.sin(t / 130) > 0.7 ? 1 : 0);
+  room.fillStyle = "#8a6238"; room.fillRect(cxx + cw/2 - 1, cyy - 9, 2, 9); // string
+  // backing board: light warm wood, hanging at a slight tilt
+  const bbW = cw + 14, bbH = ch2 + 14;
+  for (let yy = 0; yy < bbH; yy++) {
+    const shift = Math.round((yy / bbH) * 3) - 1;
+    room.fillStyle = "#a8895e";
+    room.fillRect(cxx - 4 + shift, cyy - 4 + yy, bbW, 1);
+    room.fillStyle = "#8a6a44";
+    room.fillRect(cxx - 4 + shift + bbW - 1, cyy - 4 + yy, 1, 1);
+  }
+  // the pad: pages stacked behind the front leaf, stepping down-right
+  room.fillStyle = "#cfc7b4"; room.fillRect(cxx + 6, cyy + 6, cw, ch2);
+  room.fillStyle = "#ddd6c4"; room.fillRect(cxx + 4, cyy + 4, cw, ch2);
+  room.fillStyle = "#ece6d6"; room.fillRect(cxx + 2, cyy + 2, cw, ch2);
+  // page edge lines on the stack (bottom + right)
+  room.fillStyle = "#a89f8a";
+  room.fillRect(cxx + 3, cyy + ch2 + 1, cw, 1);
+  room.fillRect(cxx + 5 + pf, cyy + ch2 + 3, cw, 1);
+  room.fillRect(cxx + cw + 1, cyy + 3, 1, ch2);
+  room.fillRect(cxx + cw + 3, cyy + 5 + pf, 1, ch2);
+  // front leaf
+  room.fillStyle = "#fff"; room.fillRect(cxx, cyy, cw, ch2);
+  room.fillStyle = "#c0332b"; room.fillRect(cxx, cyy, cw, 13);
+  const kd = keyToDate(key);
+  crispText(room, T().monthsNom[kd.getMonth()].slice(0, 3).toUpperCase(), cxx + cw/2, cyy + 2, "bold 9px Verdana, sans-serif", "#fff", "center", 9);
+  crispText(room, String(kd.getDate()), cxx + cw/2, cyy + 17, "bold 22px Verdana, sans-serif", "#222", "center", 22);
+  crispText(room, T().dows[(kd.getDay() + 6) % 7].toUpperCase(), cxx + cw/2, cyy + 42, "bold 9px Verdana, sans-serif", "#999", "center", 9);
+  // curled corner on the front leaf (lifts 1px with the flutter)
+  room.fillStyle = "#ddd";
+  room.fillRect(cxx + cw - 6 - pf, cyy + ch2 - 2 - pf, 6 + pf, 2 + pf);
+  room.fillRect(cxx + cw - 4 - pf, cyy + ch2 - 4 - pf, 4 + pf, 2);
+  room.fillRect(cxx + cw - 2, cyy + ch2 - 6 - pf, 2, 2);
+  // every so often a draft flutters the page
+  const flut = t % 720;
+  if (flut < 34 && !reducedMotion) {
+    const k = Math.round(Math.sin(flut / 34 * Math.PI) * 3);
+    room.fillStyle = "#f4f1e8";
+    room.fillRect(cxx + cw - 12 - k, cyy + ch2 - 2 - k, 12 + k, 2 + k);
+    room.fillStyle = "#cfc7b4";
+    room.fillRect(cxx + cw - 10 - k, cyy + ch2 - 1, 10 + k, 1);
+  }
+  hotRects.push({ x: cxx - 4, y: cyy - 4, w: cw + 14, h: ch2 + 14, act: "calendar" });
+
+  /* ---- ribbon banner ---- */
+  drawRibbon(banner, t, dl);
+
+  /* ---- side table with carnations (left floor) ---- */
+  const st = { x: 44, y: 208, w: 66, h: 40 };
+  const scx = st.x + st.w / 2;
+  // simple round side table, house style: two browns, straight legs
+  fillEllipseC(room, scx, st.y + 47, 42, 6, "rgba(0,0,0,.10)");
+  for (let dx3 = -36; dx3 <= 36; dx3++) { // apron under the top edge
+    const eY = st.y + 10 + Math.round(10 * Math.sqrt(Math.max(0, 1 - (dx3 / 36) ** 2)));
+    room.fillStyle = "#6b4a30"; room.fillRect(scx + dx3, eY - 2, 1, 5);
+  }
+  fillEllipseC(room, scx, st.y + 10, 36, 10, "#7d573a");   // top rim
+  fillEllipseC(room, scx, st.y + 9, 33, 8, "#9a7048");     // top face
+  room.fillStyle = "#5f4128";
+  room.fillRect(scx - 27, st.y + 18, 6, 30);
+  room.fillRect(scx + 21, st.y + 18, 6, 30);
+  // carnation heads (jagged pixel blobs) + stems
+  const flowers = [[-14, -34, "#d63c4e"], [0, -42, "#e8637a"], [14, -33, "#d63c4e"]];
+  flowers.forEach(([dx, dy, col], fi) => {
+    const swayF = reducedMotion ? 0 : Math.round(Math.sin(t / 90 + fi * 2.1) * 1);
+    const fxp = scx + dx + swayF, fyp = st.y + dy;
+    pixelLine(room, fxp, fyp + 4, scx, st.y - 4, "#3f7d3a", 2); // stems reach down inside the vase
+    room.fillStyle = col;
+    room.fillRect(fxp-5, fyp-3, 10, 7); room.fillRect(fxp-3, fyp-5, 6, 11);
+    room.fillRect(fxp-7, fyp-1, 14, 3);
+    room.fillStyle = "#b52a3c"; room.fillRect(fxp-2, fyp+1, 4, 2);
+  });
+  // glass vase drawn over the stems — they show through the open pixels, sitting IN it
+  drawGrid(room, VASE, VASE_PAL, scx - 10, st.y - 16, 3);
+
+  /* ---- gifts (right floor, clustered; each does a rare tiny hop) ---- */
+  const hopFor = gi => {
+    if (reducedMotion) return 0;
+    const c = (t + gi * 233) % 760;
+    return c < 20 ? -Math.round(Math.sin(c / 20 * Math.PI) * 2) : 0;
+  };
+  fillEllipseC(room, 390, 265, 21, 4, "rgba(0,0,0,.10)");
+  fillEllipseC(room, 434, 278, 19, 4, "rgba(0,0,0,.10)");
+  fillEllipseC(room, 400, 281, 13, 3, "rgba(0,0,0,.10)");
+  drawGrid(room, GIFT1, GIFT1_PAL, 372, 234 + hopFor(0), 3);
+  drawGrid(room, GIFT2, GIFT2_PAL, 418, 250 + hopFor(1), 3);
+  drawGrid(room, GIFT3, GIFT3_PAL, 390, 262 + hopFor(2), 3);
+  hotRects.push({ x: 368, y: 230, w: 42, h: 36, act: "gift" });
+  hotRects.push({ x: 414, y: 246, w: 39, h: 30, act: "gift" });
+  hotRects.push({ x: 386, y: 258, w: 27, h: 24, act: "gift" });
+
+  /* ---- table (center), crisp scanline ellipses ---- */
+  const tx = 240, ty = 222; // table center, snugged up toward the wall
+  fillEllipseC(room, tx, ty + 53, 80, 13, "rgba(0,0,0,.11)");       // soft shadow, tucked toward the wall
+  // cloth skirt: constant drop below the tabletop edge, following its curve
+  const drop = 32;
+  room.fillStyle = "#f3ede2";
+  for (let dx2 = -72; dx2 <= 72; dx2++) {
+    const edgeY = ty + Math.round(26 * Math.sqrt(Math.max(0, 1 - (dx2 / 72) ** 2)));
+    room.fillRect(tx + dx2, edgeY - 2, 1, drop + 2);
+  }
+  // scallop hem: spaced along the elliptical edge itself, full width, no bare ends —
+  // they bunch a little at the sides like gathered fabric
+  const nSc = 16;
+  for (let i = 0; i < nSc; i++) {
+    const th = Math.PI * (i + 0.5) / nSc;
+    const sxc = tx - Math.round(72 * Math.cos(th));
+    const ys = ty + Math.round(26 * Math.sin(th)) + drop - 1;
+    fillEllipseC(room, sxc, ys, 5, 4, "#e7b7c4", 1);
+  }
+  fillEllipseC(room, tx, ty, 72, 26, "#d8cbb5");                    // tabletop rim
+  fillEllipseC(room, tx, ty, 70, 24, "#faf6ee");                    // tabletop face
+
+  /* ---- cake ---- */
+  const ncand = Math.max(1, banner.length);
+  const cakeY = ty - 18;
+  // plate
+  fillEllipseC(room, tx, ty - 2, 40, 12, "#cdd0da");
+  fillEllipseC(room, tx, ty - 3, 38, 11, "#e8e8ee");
+  // tier 1
+  room.fillStyle = "#fdfdf8"; room.fillRect(tx - 32, cakeY - 8, 64, 22);
+  fillEllipseC(room, tx, cakeY + 14, 32, 9, "#fdfdf8", 1);
+  fillEllipseC(room, tx, cakeY - 8, 32, 9, "#f2a7bb");              // drip icing top
+  room.fillStyle = "#f2a7bb";
+  for (let i = 0; i < 8; i++) room.fillRect(tx - 30 + i * 8, cakeY - 4, 4, 6 + (i % 3) * 3);
+  // tier 2 (rounded bottom settling into the icing below)
+  room.fillStyle = "#fdfdf8"; room.fillRect(tx - 20, cakeY - 24, 40, 16);
+  fillEllipseC(room, tx, cakeY - 8, 20, 5, "#fdfdf8", 1);
+  fillEllipseC(room, tx, cakeY - 24, 20, 6, "#f2a7bb");
+  room.fillStyle = "#f2a7bb";
+  for (let i = 0; i < 5; i++) room.fillRect(tx - 18 + i * 8, cakeY - 21, 4, 5 + (i % 2) * 3);
+  // candles
+  const spread = Math.min(28, ncand * 9);
+  for (let i = 0; i < ncand; i++) {
+    const px = ncand === 1 ? tx : tx - spread / 2 + (spread / (ncand - 1)) * i;
+    const py = cakeY - 26;
+    room.fillStyle = i % 2 ? "#7ec8e3" : "#f7d154";
+    room.fillRect(Math.round(px) - 2, py - 10, 4, 10);
+    room.fillStyle = "rgba(0,0,0,.15)"; room.fillRect(Math.round(px) - 2, py - 4, 4, 1);
+    if (!state.blownOut) {
+      const ph = t / 12 + i * 2.1;
+      const fl = reducedMotion ? 0 : Math.sin(ph) * 0.8;
+      const lean = reducedMotion ? 0 : Math.round(Math.sin(t / 26 + i * 1.7));
+      const fh = 6 + (reducedMotion ? 0 : Math.round(Math.abs(Math.sin(ph * 0.6)) * 1.5));
+      const fx2 = Math.round(px) + lean, fy2 = py - 11 - fh + Math.round(fl * 0.5);
+      // soft halo around each flame — visible even in daylight
+      room.save(); room.globalCompositeOperation = "lighter";
+      const halo = room.createRadialGradient(Math.round(px), py - 14, 1, Math.round(px), py - 14, 22);
+      halo.addColorStop(0, `rgba(255,190,90,${0.15 + (reducedMotion ? 0 : Math.sin(ph) * 0.03)})`);
+      halo.addColorStop(1, "rgba(255,190,90,0)");
+      room.fillStyle = halo; room.fillRect(Math.round(px) - 24, py - 38, 48, 48);
+      room.restore();
+      // flame: outer, mid, hot core, with a leaning tip
+      room.fillStyle = "#ff9d2e"; room.fillRect(fx2 - 2, fy2, 4, fh);
+      room.fillRect(fx2 - 1 + lean, fy2 - 1, 2, 1);
+      room.fillStyle = "#ffc84a"; room.fillRect(fx2 - 1, fy2 + 1, 2, fh - 2);
+      room.fillStyle = "#ffe289"; room.fillRect(fx2 - 1, fy2 + fh - 3, 2, 2);
+    } else {
+      room.fillStyle = "#aaa"; room.fillRect(Math.round(px)-1, py-14, 2, 3);
+    }
+  }
+  hotRects.push({ x: tx - 36, y: cakeY - 40, w: 72, h: 56, act: "cake" });
+
+  /* ---- tea for the guests ---- */
+  drawGrid(room, TEA, TEA_PAL, tx + 40, ty - 18, 2);
+  drawGrid(room, TEA, TEA_PAL, tx - 64, ty - 10, 2);
+  if (!reducedMotion) {
+    [[tx + 49, ty - 22, 0], [tx - 55, ty - 14, 40]].forEach(([sx0, sy0, ph]) => {
+      for (let wi = 0; wi < 2; wi++) {
+        const p = ((t * 0.18 + ph + wi * 34) % 26) / 26;
+        const sy2 = sy0 - p * 16;
+        const sx2 = sx0 + Math.round(Math.sin(p * 6 + wi * 2) * 2) + wi * 3 - 1;
+        room.fillStyle = `rgba(240,240,235,${0.30 * (1 - p)})`;
+        room.fillRect(sx2, Math.round(sy2), 2, 2);
+      }
+    });
+  }
+
+  /* ---- ambient darkness + candle glow ---- */
+  const dark = (1 - dl) * 0.62;
+  if (dark > 0.01) {
+    const flick = reducedMotion || state.blownOut ? 0 : Math.sin(t / 3.1) * 0.02 + Math.sin(t / 7.7) * 0.015;
+    const g = room.createRadialGradient(tx, cakeY - 26, 8, tx, cakeY - 26, 190 + (state.blownOut ? -80 : 0));
+    const inner = state.blownOut ? dark * 0.85 : Math.max(0, dark * 0.1);
+    g.addColorStop(0, `rgba(18,14,40,${inner})`);
+    g.addColorStop(0.35, `rgba(18,14,40,${dark * (state.blownOut ? 0.9 : 0.55) + flick})`);
+    g.addColorStop(1, `rgba(14,10,34,${Math.min(0.85, dark + 0.12) + flick})`);
+    room.fillStyle = g; room.fillRect(-SDX, -SDY, W, H);
+    if (!state.blownOut) {
+      room.save(); room.globalCompositeOperation = "lighter";
+      const warm = room.createRadialGradient(tx, cakeY - 26, 2, tx, cakeY - 26, 90);
+      warm.addColorStop(0, `rgba(255,170,60,${0.22 * dark + (reducedMotion?0:Math.sin(t/3)*0.03)})`);
+      warm.addColorStop(1, "rgba(255,170,60,0)");
+      room.fillStyle = warm; room.fillRect(tx - 120, cakeY - 140, 240, 220);
+      room.restore();
+    }
+    // window glow spills a little at night
+    room.save(); room.globalCompositeOperation = "lighter";
+    const wg = room.createRadialGradient(wx + ww/2, wy + wh/2, 4, wx + ww/2, wy + wh/2, 80);
+    wg.addColorStop(0, `rgba(150,170,255,${0.10 * dark})`); wg.addColorStop(1, "rgba(150,170,255,0)");
+    room.fillStyle = wg; room.fillRect(wx - 60, wy - 40, ww + 120, wh + 120);
+    room.restore();
+    // the names stay softly luminous at night, DS-style
+    if (dark > 0.25) {
+      room.save(); room.globalAlpha = 0.7;
+      drawRibbon(banner, t, dl, "glow");
+      room.restore();
+    }
+  }
+  room.restore(); // end scene translate
+}
+
+/* ---- hanging cloth banner: pinned at both ends, sags in the middle,
+        wish printed above the rainbow names, side tails draping down ---- */
+function drawRibbon(banner, t, dl, mode = "full") {
+  const midX = 218, yPin = 28;
+  const nameFont = "bold 14px Verdana, sans-serif";
+  const wishFont = "bold 9px Verdana, sans-serif";
+  const sep = "  •  ";
+  const rows = banner.length <= 2 ? [banner] : [banner.slice(0, Math.ceil(banner.length/2)), banner.slice(Math.ceil(banner.length/2))];
+  const rowText = r => r.join(sep);
+  const rowW = rows.map(r => measureFont(nameFont, rowText(r)));
+  const wishW = measureFont(wishFont, T().wish.toUpperCase());
+  const tw = Math.min(230, Math.max(...rowW, wishW));
+  const bw = Math.max(160, Math.round(tw) + 32);
+  const x0 = Math.round(midX - bw / 2), x1 = x0 + bw;
+  const wishH = 13, rowH = 17;
+  const bh = 7 + wishH + rows.length * rowH + 7;
+  // cloth breathes very slightly; the text rides a STABLE curve so it doesn't bob.
+  // A gentle 2px tilt (right end lower) so it hangs like a real hand-hung banner.
+  const tilt = 2;
+  const b = reducedMotion ? 0 : Math.sin(t / 150); // one shared breath for the whole banner
+  const sagCloth = 15 + b;
+  const sagAtC = px => { const nx = Math.min(1, Math.max(0, (px - x0) / bw)); return sagCloth * 4 * nx * (1 - nx) + tilt * (nx * 2 - 1); };
+  const sagAt = px => { const nx = Math.min(1, Math.max(0, (px - x0) / bw)); return 15 * 4 * nx * (1 - nx) + tilt * (nx * 2 - 1); };
+
+  if (mode === "full") {
+    const face = mix("#b0accc", "#fdf6e6", Math.max(dl, 0.25));
+    const trim = mix("#8a5a6a", "#eba7bb", Math.max(dl, 0.3));
+    const tailC = mix("#a09cba", "#f4ecda", Math.max(dl, 0.25));
+    const tailD = mix("#7f7b9c", "#ddd1b6", Math.max(dl, 0.25));
+
+    // small tacks holding the banner to the wall (following the tilt)
+    [[x0 - 1, -tilt], [x1 - 2, tilt]].forEach(([px, dy]) => {
+      room.fillStyle = "#8a2f2f"; room.fillRect(px, yPin - 4 + dy, 3, 3);
+      room.fillStyle = "#d46a6a"; room.fillRect(px, yPin - 4 + dy, 1, 1);
+    });
+
+    // end drapes: the ribbon wraps over and falls, curling outward at the bottom
+    const dw = 18, dlen = bh + 30;
+    [[x0 - dw + 5, -1], [x1 - 5, 1]].forEach(([dx0, dir]) => {
+      const topY = Math.round(yPin - 2 + dir * tilt);
+      for (let i = 0; i < dw; i++) {
+        const outer = dir === -1 ? (dw - 1 - i) : i;         // distance from inner side
+        const jit = (i * 5 + (dir === -1 ? 2 : 0)) % 7 > 4 ? 1 : 0; // irregular fold along the top edge
+        const curve = 10 * (outer / (dw - 1)) ** 2;          // curved sweep toward the outer bottom
+        const colLen = dlen - Math.round(curve - b * 0.5 * (1 - outer / dw)) - jit;
+        const inner = dir === -1 ? i >= dw - 3 : i < 3;      // shadow where it tucks behind the band
+        const colC = i === 0 || i === dw - 1 ? "#6a5a48" : inner ? tailD : tailC;
+        // drawn row by row: pinned at the top, swaying only faintly at the hem,
+        // in time with the main panel's breath
+        for (let yy = 0; yy < colLen; yy++) {
+          const sway2 = Math.round(b * 0.7 * (yy / dlen) ** 2);
+          const isHem = yy < 2 || yy >= colLen - 2;
+          room.fillStyle = isHem ? trim : colC;
+          room.fillRect(dx0 + i + sway2, topY + jit + yy, 1, 1);
+        }
+      }
+      // curl flick follows the hem's sway
+      const swayB2 = Math.round(b * 0.7 * ((dlen - 6) / dlen) ** 2);
+      const botY = topY + dlen - 10;
+      room.fillStyle = tailD;
+      if (dir === -1) {
+        room.fillRect(dx0 - 4 + swayB2, botY, 6, 3);
+        room.fillRect(dx0 - 4 + swayB2, botY - 2, 2, 2);
+      } else {
+        room.fillRect(dx0 + dw - 2 + swayB2, botY, 6, 3);
+        room.fillRect(dx0 + dw + 2 + swayB2, botY - 2, 2, 2);
+      }
+    });
+
+    // band: per-column strips following the deep sweep — hard pixels all the way
+    for (let x = x0; x < x1; x++) {
+      const yt = Math.round(yPin + sagAtC(x));
+      room.fillStyle = trim; room.fillRect(x, yt, 1, 2);
+      room.fillStyle = face; room.fillRect(x, yt + 2, 1, bh - 4);
+      room.fillStyle = trim; room.fillRect(x, yt + bh - 2, 1, 2);
+      if ((x - x0) % 26 === 13) { // soft cloth-fold streaks like the reference
+        room.fillStyle = "rgba(90,74,58,.10)"; room.fillRect(x, yt + 2, 1, bh - 4);
+      }
+    }
+    // band side edges
+    room.fillStyle = "#5a4a3a";
+    room.fillRect(x0, Math.round(yPin + sagAtC(x0)), 1, bh);
+    room.fillRect(x1 - 1, Math.round(yPin + sagAtC(x1 - 1)), 1, bh);
+  }
+
+  // text block: wish + names, drawn crisp in one thresholded buffer
+  const glow = mode === "glow";
+  const pad = 4;
+  const bufX = x0 - pad, bufY = yPin - 2;
+  const bufW = bw + pad * 2, bufH = bh + 26;
+  const hits = [];
+  crispBlit(room, bufW, bufH, bufX, bufY, c => {
+    c.textBaseline = "top";
+    // wish line, small caps style, printed on the cloth
+    c.font = wishFont;
+    const wtext = T().wish.toUpperCase();
+    const ww = c.measureText(wtext).width;
+    let wpen = midX - ww / 2;
+    for (let ci = 0; ci < wtext.length; ci++) {
+      const sagY = sagAt(wpen);
+      c.fillStyle = glow ? "hsl(350,60%,72%)" : "#b5484d";
+      c.fillText(wtext[ci], wpen - bufX, 7 + sagY - (bufY - yPin));
+      wpen += c.measureText(wtext[ci]).width;
+    }
+    // name rows, per-letter rainbow
+    c.font = nameFont;
+    for (let ri = 0; ri < rows.length; ri++) {
+      const rw = c.measureText(rowText(rows[ri])).width;
+      let penX = midX - rw / 2;
+      const rowTop = 7 + wishH + ri * rowH;
+      for (let ni = 0; ni < rows[ri].length; ni++) {
+        const nm = rows[ri][ni];
+        const startX = penX;
+        for (let ci = 0; ci < nm.length; ci++) {
+          const hue = ((penX - x0) * 1.8 + t * 0.25) % 360;
+          c.fillStyle = `hsl(${hue}, 80%, ${glow ? 68 : 37}%)`;
+          c.fillText(nm[ci], penX - bufX, rowTop + sagAt(penX) - (bufY - yPin));
+          penX += c.measureText(nm[ci]).width;
+        }
+        hits.push({ x: startX - 2, y: yPin + rowTop + sagAt(startX) - 2, w: penX - startX + 4, h: rowH + 2, name: nm });
+        if (ni < rows[ri].length - 1) {
+          c.fillStyle = glow ? "#cbb8d8" : "#b5484d";
+          c.fillText(sep, penX - bufX, rowTop + sagAt(penX) - (bufY - yPin));
+          penX += c.measureText(sep).width;
+        }
+      }
+    }
+  });
+  if (mode === "full") nameHitboxes.push(...hits);
+}
+
+/* ---------------- confetti & bubbles (fx layer) ---------------- */
+const confetti = [];
+const bubbles = [];
+const CONF_COLORS = ["#e94f4f","#f2b134","#4a90d9","#50b86c","#c774e8","#f087b5"];
+function spawnConfetti(n, burstX, burstY) {
+  for (let i = 0; i < n; i++) confetti.push({
+    x: burstX != null ? burstX + (Math.random()-0.5)*40 : Math.random() * W,
+    y: burstY != null ? burstY + (Math.random()-0.5)*16 : -6,
+    vx: (Math.random()-0.5) * (burstX != null ? 2.2 : 0.4),
+    vy: burstY != null ? -1.5 - Math.random()*1.5 : 0.35 + Math.random()*0.4,
+    c: CONF_COLORS[Math.random()*CONF_COLORS.length|0],
+    w: 3 + (Math.random()*3|0), spin: Math.random()*6,
+  });
+}
+function spawnBubble(text, x, y) {
+  for (const ob of bubbles) ob.age = Math.max(ob.age, 100); // older bubbles start fading out
+  bubbles.push({ text, x, y, age: 0 });
+}
+
+function drawFx() {
+  fx.clearRect(0, 0, W, H);
+  for (let i = confetti.length - 1; i >= 0; i--) {
+    const p = confetti[i];
+    p.x += p.vx + Math.sin((state.t + p.spin*60) / 22) * 0.5;
+    p.vy = Math.min(p.vy + 0.03, 0.9); p.y += p.vy;
+    if (p.y > H + 8) { confetti.splice(i, 1); continue; }
+    // crisp tumble: width/height oscillate instead of antialiased rotation
+    const tum = Math.abs(Math.sin(state.t / 18 + p.spin));
+    const cw2 = Math.max(2, Math.round(p.w * tum) + 1);
+    const ch3 = Math.max(2, Math.round(4 * (1 - tum)) + 1);
+    fx.fillStyle = p.c;
+    fx.fillRect(Math.round(p.x - cw2/2), Math.round(p.y - ch3/2), cw2, ch3);
+  }
+  fx.save(); fx.translate(SDX, SDY);
+  for (let i = bubbles.length - 1; i >= 0; i--) if (++bubbles[i].age > 130) bubbles.splice(i, 1);
+  for (const b of bubbles) { // oldest first, so the newest bubble overlaps the rest
+    const rise = Math.min(b.age, 30) * 0.5;
+    fx.globalAlpha = b.age > 100 ? (130 - b.age) / 30 : 1;
+    const bfont = "bold 12px Verdana, sans-serif";
+    const tw = measureFont(bfont, b.text);
+    const bx = Math.min(Math.max(b.x, tw/2 + 12 - SDX), W - SDX - tw/2 - 12), by = Math.round(b.y - rise);
+    const bw2 = Math.round(tw) + 16, bh2 = 21;
+    const bx0 = Math.round(bx - bw2/2);
+    // pixel-border bubble: dark frame, notched corners, cream face
+    fx.fillStyle = "#2a2e33"; fx.fillRect(bx0, by - 14, bw2, bh2);
+    fx.fillStyle = "#fffdf5"; fx.fillRect(bx0 + 2, by - 12, bw2 - 4, bh2 - 4);
+    fx.fillStyle = "#fffdf5";
+    fx.fillRect(bx0, by - 14, 2, 2); fx.fillRect(bx0 + bw2 - 2, by - 14, 2, 2);
+    fx.fillRect(bx0, by - 14 + bh2 - 2, 2, 2); fx.fillRect(bx0 + bw2 - 2, by - 14 + bh2 - 2, 2, 2);
+    crispText(fx, b.text, bx, by - 11, bfont, "#2a2e33", "center", 12);
+    fx.globalAlpha = 1;
+  }
+  fx.restore();
+}
+
+/* ---------------- interactions ---------------- */
+const roomEl = document.getElementById("room");
+function canvasPos(ev) {
+  const r = roomEl.getBoundingClientRect();
+  return { x: (ev.clientX - r.left) / r.width * W - SDX, y: (ev.clientY - r.top) / r.height * H - SDY };
+}
+roomEl.addEventListener("click", ev => {
+  const { x, y } = canvasPos(ev);
+  for (const nb of nameHitboxes)
+    if (x >= nb.x && x <= nb.x + nb.w && y >= nb.y && y <= nb.y + nb.h) return openCard(nb.name);
+  for (const hr of hotRects)
+    if (x >= hr.x && x <= hr.x + hr.w && y >= hr.y && y <= hr.y + hr.h) {
+      if (hr.act === "calendar") return openCalendar(keyToDate(activeKey()).getMonth());
+      if (hr.act === "cake") return cakeClick(x, y);
+      if (hr.act === "gift") return giftClick(x, y);
+    }
+});
+roomEl.addEventListener("mousemove", ev => {
+  const { x, y } = canvasPos(ev);
+  const hot = nameHitboxes.some(nb => x>=nb.x&&x<=nb.x+nb.w&&y>=nb.y&&y<=nb.y+nb.h)
+    || hotRects.some(hr => x>=hr.x&&x<=hr.x+hr.w&&y>=hr.y&&y<=hr.y+hr.h);
+  roomEl.style.cursor = hot ? "pointer" : "default";
+});
+
+function cakeClick(x, y) {
+  if (state.blownOut) return;
+  state.blownOut = true;
+  spawnConfetti(50, 240 + SDX, 190 + SDY);
+  const w = T().wishes;
+  spawnBubble(w[Math.random()*w.length|0], 240, 168);
+  setTimeout(() => { state.blownOut = false; }, 3500);
+}
+function giftClick(x, y) {
+  spawnConfetti(14, x + SDX, y - 10 + SDY);
+  const key = activeKey();
+  const all = NAMEDATA.days[key] || [];
+  const rare = all.filter(n => (NAMEDATA.counts[n] || 0) < 2000);
+  const pool = rare.length ? rare : all;
+  const pick = pool[Math.random()*pool.length|0];
+  if (pick) spawnBubble(T().alsoGift + " " + pick, x, y - 18);
+}
+
+/* ---------------- panels ---------------- */
+const calPanel = document.getElementById("calPanel");
+const cardPanel = document.getElementById("cardPanel");
+document.querySelectorAll(".x").forEach(el =>
+  el.addEventListener("click", () => document.getElementById(el.dataset.close).classList.add("hidden")));
+
+const infoPanel = document.getElementById("infoPanel");
+let curMonth = null, curDayKey = null, curCard = null; // for live language rebuild
+function openInfo() {
+  document.getElementById("infoTitle").textContent = T().infoTitle;
+  document.getElementById("infoBody").innerHTML = T().infoBody;
+  calPanel.classList.add("hidden"); cardPanel.classList.add("hidden");
+  infoPanel.classList.remove("hidden");
+}
+document.getElementById("infoFab").addEventListener("click", openInfo);
+
+function openCalendar(month) {
+  curMonth = month; curDayKey = null;
+  cardPanel.classList.add("hidden");
+  infoPanel.classList.add("hidden");
+  document.getElementById("calTitle").textContent = T().calendar;
+  const body = document.getElementById("calBody");
+  const y = new Date().getFullYear();
+  const first = new Date(y, month, 1);
+  const dim = new Date(y, month + 1, 0).getDate();
+  const lead = (first.getDay() + 6) % 7;
+  let html = `<div class="cal-nav">
+    <button data-m="${(month+11)%12}">◀</button>
+    <b>${T().monthsNom[month]}</b>
+    <button data-m="${(month+1)%12}">▶</button></div><div class="cal-grid">`;
+  for (const d of T().dows) html += `<span class="dow">${d}</span>`;
+  for (let i = 0; i < lead; i++) html += `<span class="cal-day blank"></span>`;
+  const tk = todayKey();
+  for (let d = 1; d <= dim; d++) {
+    const key = String(month+1).padStart(2,"0") + "-" + String(d).padStart(2,"0");
+    const names = (NAMEDATA.banner[key] || []).slice(0, 2).join(", ");
+    html += `<span class="cal-day${key===tk?" today":""}" data-day="${key}"><b>${d}</b><span class="nm">${names}</span></span>`;
+  }
+  html += `</div>`;
+  body.innerHTML = html;
+  body.querySelectorAll("[data-m]").forEach(b => b.addEventListener("click", () => openCalendar(+b.dataset.m)));
+  body.querySelectorAll("[data-day]").forEach(b => b.addEventListener("click", () => openDay(b.dataset.day, month)));
+  calPanel.classList.remove("hidden");
+}
+
+function openDay(key, backMonth) {
+  curDayKey = key; curMonth = backMonth;
+  const body = document.getElementById("calBody");
+  const d = keyToDate(key);
+  const all = NAMEDATA.days[key] || [];
+  let html = `<div class="cal-nav"><button id="backCal">${T().back}</button>
+    <b>${d.getDate()} ${T().months[d.getMonth()]}</b><span></span></div>
+    <div class="muted">${T().allToday}</div><div class="day-list">`;
+  for (const n of all) {
+    const c = NAMEDATA.counts[n];
+    html += `<span class="name-chip" data-nm="${n}">${n}${c ? "" : ` <small>✦</small>`}</span>`;
+  }
+  html += `</div>`;
+  body.innerHTML = html;
+  document.getElementById("backCal").addEventListener("click", () => openCalendar(backMonth));
+  body.querySelectorAll("[data-nm]").forEach(b => b.addEventListener("click", () => openCard(b.dataset.nm)));
+}
+
+function openCard(name) {
+  curCard = name;
+  infoPanel.classList.add("hidden");
+  document.getElementById("cardTitle").textContent = T().nameCard;
+  const body = document.getElementById("cardBody");
+  const card = CARDS[name];
+  const count = NAMEDATA.counts[name];
+  // all dates this name appears
+  const dates = [];
+  for (const [k, names] of Object.entries(NAMEDATA.days))
+    if (names.includes(name)) dates.push(k);
+  dates.sort();
+  const dateStr = dates.map(k => { const d = keyToDate(k); return `${d.getDate()} ${T().months[d.getMonth()]}`; }).join(", ");
+  let html = `<div class="card-name">${rainbowHTML(name)}</div>`;
+  html += `<div class="card-row"><span class="lbl">${T().nameDays}</span>${dateStr || "—"}</div>`;
+  const peselLink = `<a href="https://dane.gov.pl/pl/dataset/1667" target="_blank" rel="noopener">${T().bearersLbl}</a>`;
+  if (count) html += `<div class="card-row"><span class="lbl">${peselLink}</span>${T().bearers(count)}</div>`;
+  else html += `<div class="card-row"><span class="lbl">${peselLink}</span><span class="muted">✦ ${T().rare}</span></div>`;
+  if (card) {
+    html += `<div class="card-row"><span class="lbl">${T().origin}</span>${card[lang]}</div>`;
+    if (card.d && card.d.length) html += `<div class="card-row"><span class="lbl">${T().dims}</span>${card.d.join(", ")}</div>`;
+  } else {
+    html += `<div class="card-row muted">${T().noCard}</div>`;
+  }
+  body.innerHTML = html;
+  cardPanel.classList.remove("hidden");
+}
+function rainbowHTML(text) {
+  return [...text].map((ch, i) => `<span style="color:hsl(${(i*42)%360},72%,42%)">${ch}</span>`).join("");
+}
+
+/* ---------------- tray controls ---------------- */
+const dateLabel = document.getElementById("dateLabel");
+const clockLabel = document.getElementById("clockLabel");
+const timeSlider = document.getElementById("timeSlider");
+const liveBtn = document.getElementById("liveBtn");
+const langBtn = document.getElementById("langFab");
+
+function refreshTray() {
+  const d = keyToDate(activeKey());
+  dateLabel.textContent = `${T().weekdays[d.getDay()]}, ${d.getDate()} ${T().months[d.getMonth()]}`;
+  const h = activeHour();
+  clockLabel.textContent = String(Math.floor(h)).padStart(2,"0") + ":" + String(Math.floor((h%1)*60)).padStart(2,"0");
+  if (state.simHour == null) timeSlider.value = Math.round(h * 60);
+  liveBtn.classList.toggle("on", state.simHour == null);
+  liveBtn.textContent = T().live;
+  langBtn.textContent = lang.toUpperCase();
+  document.documentElement.lang = lang;
+}
+timeSlider.addEventListener("input", () => { state.simHour = timeSlider.value / 60; refreshTray(); });
+liveBtn.addEventListener("click", () => { state.simHour = null; refreshTray(); });
+langBtn.addEventListener("click", () => {
+  lang = lang === "pl" ? "en" : "pl";
+  localStorage.setItem("imieniny-lang", lang);
+  refreshTray();
+  // any open panel re-renders in the new language, in place
+  if (!calPanel.classList.contains("hidden")) {
+    const m = curMonth ?? keyToDate(activeKey()).getMonth();
+    if (curDayKey) openDay(curDayKey, m); else openCalendar(m);
+  }
+  if (!cardPanel.classList.contains("hidden") && curCard) openCard(curCard);
+  if (!infoPanel.classList.contains("hidden")) openInfo();
+});
+
+/* ---------------- main loop ---------------- */
+let lastAmbient = 0;
+function loop() {
+  state.t++;
+  draw();
+  if (!reducedMotion && state.t - lastAmbient > 240 && confetti.length < 4) {
+    lastAmbient = state.t; spawnConfetti(1);
+  }
+  drawFx();
+  requestAnimationFrame(loop);
+}
+/* the tray (date + time scrubber) is a dev tool: only with ?dev in the URL */
+const DEV = params.has("dev");
+const trayEl = document.getElementById("tray");
+let trayTimer;
+function pokeTray() {
+  if (!DEV) return;
+  trayEl.classList.add("show");
+  clearTimeout(trayTimer);
+  trayTimer = setTimeout(() => trayEl.classList.remove("show"), 3200);
+}
+addEventListener("mousemove", pokeTray);
+addEventListener("touchstart", pokeTray, { passive: true });
+trayEl.addEventListener("mouseenter", () => clearTimeout(trayTimer));
+trayEl.addEventListener("mouseleave", pokeTray);
+pokeTray();
+
+refreshTray();
+setInterval(refreshTray, 30000);
+/* debug/test hooks: ?open=cal or ?open=card:Anna */
+const openParam = params.get("open");
+if (openParam === "cal") openCalendar(keyToDate(activeKey()).getMonth());
+else if (openParam && openParam.startsWith("card:")) openCard(openParam.slice(5));
+if (reducedMotion) { // gentle 2fps redraw instead of rAF
+  draw(); drawFx();
+  setInterval(() => { state.t += 30; draw(); drawFx(); }, 500);
+} else {
+  loop();
+}
+</script>
+</body>
+</html>
