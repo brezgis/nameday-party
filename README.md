@@ -1,7 +1,9 @@
 # 🎂 Nameday Party
 
 An ambient celebration room for Polish name days (*imieniny*) — inspired by the
-Nintendo DS birthday easter egg, PictoChat, and Animal Crossing birthday parties.
+[Nintendo DS birthday easter egg](https://eeggs.com/items/44419.html),
+[PictoChat](https://en.wikipedia.org/wiki/PictoChat), and
+[Animal Crossing birthday parties](https://nookipedia.com/wiki/Birthday).
 
 ![The room by day](screenshot-day.png)
 
