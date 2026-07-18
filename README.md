@@ -47,4 +47,4 @@ language, `?dev` shows a time-scrubber tray for playing with the light.
   fact-checking review pass. Printed name-day calendars vary between publishers,
   and etymology entries may contain mistakes — corrections are very welcome.
 
-Sto lat! 🕯️
+[MIT licensed](LICENSE). Sto lat! 🕯️
